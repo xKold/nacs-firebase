@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "nacs2x"
+  },
+  "targets": {
+    "nacs2x": {
+      "hosting": {
+        "production": [
+          "nacs2x"
+        ],
+        "staging": [
+          "nacs2x-staging"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
