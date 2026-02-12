@@ -20,10 +20,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Create .env for build and runtime
+        run: |
+          echo "FACEIT_API_KEY=${{ secrets.FACEIT_API_KEY }}" >> .env
+          echo "PANDASCORE_API_KEY=${{ secrets.PANDASCORE_API_KEY }}" >> .env
+
       - name: Build Next.js
-        env:
-          FACEIT_API_KEY: ${{ secrets.FACEIT_API_KEY }}
-          PANDASCORE_API_KEY: ${{ secrets.PANDASCORE_API_KEY }}
         run: npx next build
 
       - name: Deploy to staging
