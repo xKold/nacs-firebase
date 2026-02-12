@@ -35,6 +35,8 @@ jobs:
           projectId: nacs2x
           target: staging
           channelId: live
+        env:
+          FIREBASE_CLI_EXPERIMENTS: webframeworks
 
       - name: Deploy to production
         if: github.ref == 'refs/heads/main'
@@ -45,3 +47,5 @@ jobs:
           projectId: nacs2x
           target: production
           channelId: live
+        env:
+          FIREBASE_CLI_EXPERIMENTS: webframeworks
