@@ -1,78 +1,83 @@
 'use client';
 
+import './globals.css';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const [hideBanner, setHideBanner] = useState(false);
-  const [lastScrollY, setLastScrollY] = useState(0);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    function handleScroll() {
-      const currentScrollY = window.scrollY;
-      if (currentScrollY > lastScrollY && currentScrollY > 100) {
-        // scrolling down & scrolled 100px or more => hide banner
-        setHideBanner(true);
-      } else {
-        // scrolling up => show banner
-        setHideBanner(false);
-      }
-      setLastScrollY(currentScrollY);
-    }
-
+    const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
-
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [lastScrollY]);
+  }, []);
 
   return (
     <html lang="en">
-      <body style={{ margin: 0, background: '#f9f9f9' }}>
-        <header
-          style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 1000,
-            backgroundColor: '#fff',
-            borderBottom: '1px solid #ddd',
-            paddingBottom: '1rem',
-            transition: 'transform 0.3s ease',
-            transform: hideBanner ? 'translateY(-150px)' : 'translateY(0)', // slide up to hide
-          }}
+      <body>
+        {/* Navigation Bar */}
+        <nav
+          className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+            scrolled
+              ? 'bg-surface/95 backdrop-blur-md shadow-lg shadow-black/20'
+              : 'bg-transparent'
+          }`}
         >
-          <Link href="/" style={{ position: 'absolute', top: 20, left: 20, zIndex: 1100 }}>
-            <Image src="/icon.png" alt="Home" width={40} height={40} style={{ borderRadius: '50%' }} />
-          </Link>
+          <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-3 group">
+              <Image
+                src="/icon.png"
+                alt="NACS"
+                width={36}
+                height={36}
+                className="rounded-full transition-transform duration-200 group-hover:scale-110"
+              />
+              <span className="text-lg font-bold tracking-wide text-text">
+                NACS
+              </span>
+            </Link>
 
-          {/* Container to crop banner height */}
-          <div
-            style={{
-              height: 250,         // desired cropped height
-              overflow: 'hidden',  // crop top & bottom visually
-              marginTop: 0,       // push banner down to crop top visually (adjust as needed)
-              marginBottom: -20,    // crop bottom by margin
-              position: 'relative',
-              zIndex: 100,
-            }}
-          >
-            <Image
-              src="/bannerfix.png"
-              alt="Site Banner"
-              width={3000}
-              height={664}
-              style={{
-                width: '100%',
-                height: 'auto',
-                objectFit: 'cover',
-                // optionally shift image inside container to crop more top or bottom:
-                objectPosition: 'center center', // try 'center top' or 'center 30%' to shift crop
-              }}
-              priority
-            />
+            <div className="flex items-center gap-6">
+              <Link
+                href="/"
+                className="text-sm font-medium text-text-secondary hover:text-text transition-colors duration-200"
+              >
+                Events
+              </Link>
+              <Link
+                href="/matches"
+                className="text-sm font-medium text-text-secondary hover:text-text transition-colors duration-200"
+              >
+                Matches
+              </Link>
+            </div>
           </div>
-        </header>
-        <main>{children}</main>
+        </nav>
+
+        {/* Banner */}
+        <div className="relative w-full h-[280px] overflow-hidden">
+          <Image
+            src="/bannerfix.png"
+            alt="NACS Banner"
+            width={3000}
+            height={664}
+            className="w-full h-full object-cover object-[center_40%]"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-bg/30 via-transparent to-bg" />
+        </div>
+
+        {/* Main Content */}
+        <main className="relative -mt-12 z-10">
+          {children}
+        </main>
+
+        {/* Footer */}
+        <footer className="mt-20 pb-8 text-center text-xs text-text-muted">
+          Powered by North American Counter Strike
+        </footer>
       </body>
     </html>
   );

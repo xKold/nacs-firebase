@@ -2,6 +2,34 @@ import { NextResponse } from 'next/server';
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY;
 
+async function fetchAllPages(baseUrl: string) {
+  const allItems: any[] = [];
+  let offset = 0;
+  const limit = 100;
+
+  while (true) {
+    const separator = baseUrl.includes('?') ? '&' : '?';
+    const res = await fetch(`${baseUrl}${separator}limit=${limit}&offset=${offset}`, {
+      headers: {
+        Authorization: `Bearer ${FACEIT_API_KEY}`,
+      },
+    });
+    if (!res.ok) {
+      if (allItems.length === 0) {
+        return { error: true, status: res.status };
+      }
+      break;
+    }
+    const data = await res.json();
+    const items = data.items || [];
+    allItems.push(...items);
+    if (items.length < limit) break;
+    offset += limit;
+  }
+
+  return { error: false, items: allItems };
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
@@ -9,11 +37,11 @@ export async function GET(request: Request) {
   const leagueId = searchParams.get('leagueId');
   const seasonId = searchParams.get('seasonId');
 
-  let url = '';
+  let baseUrl = '';
   if (championshipId) {
-    url = `https://open.faceit.com/data/v4/championships/${championshipId}/matches`;
+    baseUrl = `https://open.faceit.com/data/v4/championships/${championshipId}/matches`;
   } else if (leagueId && seasonId) {
-    url = `https://open.faceit.com/data/v4/leagues/${leagueId}/seasons/${seasonId}/matches`;
+    baseUrl = `https://open.faceit.com/data/v4/leagues/${leagueId}/seasons/${seasonId}/matches`;
   } else {
     return NextResponse.json(
       { error: 'Missing required parameters: either championshipId or leagueId + seasonId' },
@@ -21,19 +49,14 @@ export async function GET(request: Request) {
     );
   }
 
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${FACEIT_API_KEY}`,
-    },
-  });
+  const result = await fetchAllPages(baseUrl);
 
-  if (!res.ok) {
+  if (result.error) {
     return NextResponse.json(
       { error: 'Failed to fetch from FACEIT API' },
-      { status: res.status }
+      { status: (result as any).status }
     );
   }
 
-  const data = await res.json();
-  return NextResponse.json(data);
+  return NextResponse.json({ items: result.items });
 }
