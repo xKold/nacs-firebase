@@ -330,6 +330,13 @@ function TeamStatsTable({
                     >
                       {player.nickname}
                     </Link>
+                  ) : player.faceitId ? (
+                    <Link
+                      href={`/players/${player.faceitId}?view=pro`}
+                      className="hover:text-accent transition-colors"
+                    >
+                      {player.nickname}
+                    </Link>
                   ) : (
                     <span>{player.nickname}</span>
                   )}

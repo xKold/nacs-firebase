@@ -1,4 +1,9 @@
 import Link from 'next/link';
+import { findGridSeriesForMatch, fetchGridSeriesState, fetchPandaScoreMatchPlayerStats, fetchPandaScoreMatchGames } from '@/lib/pro-team-api';
+import { normalizeGridStats } from '@/lib/normalizers/grid-stats';
+import { normalizePandaScoreStats } from '@/lib/normalizers/pandascore-stats';
+import type { NormalizedMatchStats } from '@/lib/types/match-stats';
+import MatchStatsTable from '@/app/components/MatchStatsTable';
 
 interface PSTeam {
   id: number;
@@ -167,6 +172,89 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   const streams = (match.streams_list || []).filter((s) => s.raw_url);
 
+  // Try to build normalized stats: Grid.gg → PandaScore stats → null (falls back to basic map cards)
+  let normalizedStats: NormalizedMatchStats | null = null;
+
+  // Build PandaScore player ID → name map from rosters
+  const psPlayerNames = new Map<number, string>();
+  for (const p of roster1) psPlayerNames.set(p.id, p.name);
+  for (const p of roster2) psPlayerNames.set(p.id, p.name);
+
+  if (team1 && team2) {
+    // 1. Try Grid.gg
+    const matchDate = match.scheduled_at || match.begin_at;
+    const gridSeriesId = await findGridSeriesForMatch(team1.name, team2.name, matchDate);
+    if (gridSeriesId) {
+      const gridState = await fetchGridSeriesState(gridSeriesId);
+      if (gridState) {
+        normalizedStats = normalizeGridStats(gridState, team1.image_url ?? undefined, team2.image_url ?? undefined);
+      }
+    }
+
+    // 2. If Grid.gg didn't work, try PandaScore player stats
+    if (!normalizedStats) {
+      const [psPlayerStats, psGames] = await Promise.all([
+        fetchPandaScoreMatchPlayerStats(match.id),
+        fetchPandaScoreMatchGames(match.id),
+      ]);
+      if (psPlayerStats && psGames) {
+        normalizedStats = normalizePandaScoreStats(
+          psPlayerStats,
+          psGames,
+          team1.name,
+          team2.name,
+          team1.id,
+          team2.id,
+          team1.image_url ?? undefined,
+          team2.image_url ?? undefined,
+          psPlayerNames,
+        );
+      }
+    }
+  }
+
+  // Look up FACEIT IDs for all player nicknames in the stats
+  if (normalizedStats) {
+    const allPlayers = normalizedStats.maps.flatMap((m) => [...m.team1Players, ...m.team2Players]);
+    const uniqueNicks = [...new Set(allPlayers.map((p) => p.nickname).filter(Boolean))];
+
+    if (uniqueNicks.length > 0) {
+      const faceitHeaders = {
+        Authorization: `Bearer ${process.env.FACEIT_API_KEY}`,
+        Accept: 'application/json',
+      };
+
+      const faceitLookups = await Promise.all(
+        uniqueNicks.map(async (nick) => {
+          try {
+            const res = await fetch(
+              `https://open.faceit.com/data/v4/players?nickname=${encodeURIComponent(nick)}&game=cs2`,
+              { headers: faceitHeaders, cache: 'no-store' }
+            );
+            if (!res.ok) return null;
+            const data = await res.json();
+            return { nickname: nick, faceitId: data.player_id as string };
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const faceitIdMap = new Map<string, string>();
+      for (const r of faceitLookups) {
+        if (r) faceitIdMap.set(r.nickname.toLowerCase(), r.faceitId);
+      }
+
+      // Inject faceitIds into all player stats
+      for (const map of normalizedStats.maps) {
+        for (const p of [...map.team1Players, ...map.team2Players]) {
+          const fid = faceitIdMap.get(p.nickname.toLowerCase());
+          if (fid) p.faceitId = fid;
+        }
+      }
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto px-4">
       {/* Back link */}
@@ -293,8 +381,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </div>
       </div>
 
-      {/* Map Result Cards */}
-      {match.games && match.games.length > 0 && (isFinished || isLive) && (
+      {/* Tabbed Match Stats (Grid.gg or PandaScore) or basic Map Result Cards */}
+      {normalizedStats ? (
+        <div className="mb-6">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-text-secondary mb-4">Map Results</h2>
+          <MatchStatsTable stats={normalizedStats} />
+        </div>
+      ) : match.games && match.games.length > 0 && (isFinished || isLive) ? (
         <div className="mb-6">
           <h2 className="text-sm font-bold uppercase tracking-wider text-text-secondary mb-4">Map Results</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -380,7 +473,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
               })}
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Team Rosters */}
       {(roster1.length > 0 || roster2.length > 0) && (

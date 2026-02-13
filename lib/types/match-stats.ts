@@ -3,6 +3,7 @@
 export interface NormalizedPlayerStat {
   playerId: string;
   nickname: string;
+  faceitId?: string;       // FACEIT player ID for profile linking
   kills: number;
   deaths: number;
   assists: number;
@@ -48,7 +49,7 @@ export interface NormalizedMapStats {
 }
 
 export interface NormalizedMatchStats {
-  source: 'faceit' | 'hltv';
+  source: 'faceit' | 'hltv' | 'grid' | 'pandascore';
 
   team1Name: string;
   team2Name: string;

@@ -8,7 +8,6 @@ import {
   PSTournament,
   ParsedBracket,
   BracketSection,
-  BracketMatchCard,
   ListMatchCard,
   MatchListSectionHeader,
 } from '../../components/bracket';
@@ -84,21 +83,16 @@ export default function SerieTabs({ stages }: { stages: StageData[] }) {
                 title={
                   bracket.lowerBracket.length > 0 ? 'Upper Bracket' : 'Bracket'
                 }
-                rounds={bracket.upperBracket}
+                rounds={
+                  bracket.grandFinal
+                    ? [...bracket.upperBracket, { label: 'Grand Final', matches: [bracket.grandFinal] }]
+                    : bracket.upperBracket
+                }
               />
             )}
 
             {bracket.lowerBracket.length > 0 && (
               <BracketSection title="Lower Bracket" rounds={bracket.lowerBracket} />
-            )}
-
-            {bracket.grandFinal && (
-              <div className="mb-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary mb-3 px-1">
-                  Grand Final
-                </h3>
-                <BracketMatchCard match={bracket.grandFinal} />
-              </div>
             )}
           </>
         ) : matches.length === 0 ? (

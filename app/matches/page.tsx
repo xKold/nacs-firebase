@@ -27,10 +27,25 @@ interface Match {
   start_date?: string;
 }
 
+interface ProEvent {
+  id: number;
+  name: string;
+  leagueName: string;
+  leagueImageUrl: string | null;
+  leagueId: number;
+  beginAt: string | null;
+  endAt: string | null;
+  year: number | null;
+  tier: string;
+  status: 'upcoming' | 'ongoing' | 'completed';
+}
+
 function MatchesContent() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<string>('');
+  const [proEvents, setProEvents] = useState<ProEvent[]>([]);
+  const [proLoading, setProLoading] = useState(true);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -43,6 +58,15 @@ function MatchesContent() {
       setSelectedEvent(events[0].id);
     }
   }, [eventIdFromUrl]);
+
+  // Fetch pro events from PandaScore
+  useEffect(() => {
+    fetch('/api/pro-events')
+      .then((res) => res.json())
+      .then((data) => setProEvents(data.series || []))
+      .catch(() => setProEvents([]))
+      .finally(() => setProLoading(false));
+  }, []);
 
   useEffect(() => {
     if (!selectedEvent) return;
@@ -247,10 +271,15 @@ function MatchesContent() {
     );
   };
 
+  // Group pro events by status
+  const proOngoing = proEvents.filter((e) => e.status === 'ongoing');
+  const proUpcoming = proEvents.filter((e) => e.status === 'upcoming');
+  const proCompleted = proEvents.filter((e) => e.status === 'completed');
+
   return (
-    <div className="max-w-4xl mx-auto px-4">
+    <div className="max-w-4xl mx-auto px-4 flex flex-col gap-6">
+      {/* FACEIT Events */}
       <div className="bg-surface rounded-xl border border-border p-8">
-        {/* Event Selector */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold">
@@ -275,7 +304,6 @@ function MatchesContent() {
           </select>
         </div>
 
-        {/* Match Sections */}
         {ongoing.length === 0 && upcoming.length === 0 && completed.length === 0 && (
           <p className="text-text-muted text-center py-8">No matches found.</p>
         )}
@@ -283,7 +311,128 @@ function MatchesContent() {
         {renderSection('Upcoming', upcoming, 'bg-warning')}
         {renderSection('Completed', completed, 'bg-success')}
       </div>
+
+      {/* Pro Events (dynamically fetched from PandaScore) */}
+      <div className="bg-surface rounded-xl border border-border p-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold">Pro Events</h2>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 mt-1 inline-block">
+              PandaScore
+            </span>
+          </div>
+        </div>
+
+        {proLoading ? (
+          <div className="flex items-center gap-3 text-text-secondary py-4">
+            <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+            Loading pro events...
+          </div>
+        ) : proEvents.length === 0 ? (
+          <p className="text-text-muted text-center py-8">No pro events found.</p>
+        ) : (
+          <>
+            {/* Ongoing */}
+            {proOngoing.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-live" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary">Live</h3>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {proOngoing.map((e) => (
+                    <ProEventCard key={e.id} event={e} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upcoming */}
+            {proUpcoming.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-warning" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary">Upcoming</h3>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {proUpcoming.map((e) => (
+                    <ProEventCard key={e.id} event={e} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Completed */}
+            {proCompleted.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-success" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary">Completed</h3>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {proCompleted.map((e) => (
+                    <ProEventCard key={e.id} event={e} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
+  );
+}
+
+function ProEventCard({ event }: { event: ProEvent }) {
+  const dateRange = [
+    event.beginAt
+      ? new Date(event.beginAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : null,
+    event.endAt
+      ? new Date(event.endAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' \u2014 ');
+
+  return (
+    <Link
+      href={`/matches/pro/serie/${event.id}`}
+      className="group flex items-center justify-between p-4 rounded-lg bg-surface-hover/50 border border-border hover:border-accent/40 hover:bg-surface-hover transition-all duration-200"
+    >
+      <div className="flex items-center gap-3">
+        {event.leagueImageUrl && (
+          <img src={event.leagueImageUrl} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
+        )}
+        <span className="font-semibold text-text group-hover:text-accent transition-colors">
+          {event.leagueName}: {event.name}
+        </span>
+        {event.status === 'ongoing' && (
+          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-live">
+            <span className="w-1.5 h-1.5 rounded-full bg-live animate-pulse" />
+            Live
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-3">
+        {dateRange && (
+          <span className="text-xs text-text-muted hidden sm:inline" suppressHydrationWarning>
+            {dateRange}
+          </span>
+        )}
+        <span
+          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+            event.status === 'ongoing'
+              ? 'bg-live/10 text-live'
+              : event.status === 'upcoming'
+                ? 'bg-warning/10 text-warning'
+                : 'bg-success/10 text-success'
+          }`}
+        >
+          {event.status === 'ongoing' ? 'Live' : event.status === 'upcoming' ? 'Upcoming' : 'Completed'}
+        </span>
+      </div>
+    </Link>
   );
 }
 

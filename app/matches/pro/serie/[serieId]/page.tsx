@@ -36,7 +36,7 @@ async function fetchSerieData(serieId: string) {
 
   // Fetch all tournaments in this serie
   const tournamentsList = (await fetchJson(
-    `https://api.pandascore.co/series/${serieId}/tournaments?page%5Bsize%5D=25`
+    `https://api.pandascore.co/series/${serieId}/tournaments?per_page=25`
   )) as SerieTournamentListItem[] | null;
 
   if (!tournamentsList || tournamentsList.length === 0) return null;
