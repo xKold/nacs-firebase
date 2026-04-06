@@ -5,8 +5,10 @@ import {
   PSBracketMatch,
   PSTournament,
   parseBracket,
+  isSwissFormat,
   TierBadge,
   BracketSection,
+  SwissBracketSection,
   ListMatchCard,
   MatchListSectionHeader,
 } from '../components/bracket';
@@ -90,7 +92,8 @@ export default async function Page({ params }: { params: Promise<{ tournamentId:
     .filter(Boolean)
     .join(' — ');
 
-  const bracket = bracketMatches ? parseBracket(bracketMatches) : null;
+  const isSwiss = bracketMatches && bracketMatches.length > 0 && isSwissFormat(bracketMatches);
+  const bracket = !isSwiss && bracketMatches ? parseBracket(bracketMatches) : null;
   const hasBracket = bracket && (bracket.upperBracket.length > 0 || bracket.lowerBracket.length > 0 || bracket.grandFinal);
 
   const live = matches.filter((m) => m.status === 'running');
@@ -132,6 +135,13 @@ export default async function Page({ params }: { params: Promise<{ tournamentId:
           </div>
         </div>
       </div>
+
+      {/* Swiss View */}
+      {isSwiss && bracketMatches && (
+        <div className="bg-surface rounded-xl border border-border p-6">
+          <SwissBracketSection matches={bracketMatches} />
+        </div>
+      )}
 
       {/* Bracket View */}
       {hasBracket ? (

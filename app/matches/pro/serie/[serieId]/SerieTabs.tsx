@@ -7,7 +7,11 @@ import {
   PSBracketMatch,
   PSTournament,
   ParsedBracket,
+  PSStanding,
   BracketSection,
+  SwissBracketSection,
+  PrizeDistribution,
+  isSwissFormat,
   ListMatchCard,
   MatchListSectionHeader,
 } from '../../components/bracket';
@@ -16,6 +20,9 @@ export interface StageData {
   tournament: PSTournament;
   matches: PSMatch[];
   bracket: ParsedBracket | null;
+  bracketMatches?: PSBracketMatch[];
+  standings?: PSStanding[];
+  prizePool?: string | null;
 }
 
 export default function SerieTabs({ stages }: { stages: StageData[] }) {
@@ -24,12 +31,21 @@ export default function SerieTabs({ stages }: { stages: StageData[] }) {
     s.matches.some((m) => m.status === 'running')
   );
   const [activeIdx, setActiveIdx] = useState(defaultIdx >= 0 ? defaultIdx : 0);
+  const [bracketCollapsed, setBracketCollapsed] = useState(false);
 
   const stage = stages[activeIdx];
   if (!stage) return null;
 
   const { tournament, matches, bracket } = stage;
+
+  // Check for Swiss FIRST — parseBracket puts all Swiss matches at depth 0 in one round,
+  // which makes hasBracket true even though it's not a real bracket
+  const swissMatches = stage.bracketMatches && stage.bracketMatches.length > 0 && isSwissFormat(stage.bracketMatches)
+    ? stage.bracketMatches
+    : null;
+
   const hasBracket =
+    !swissMatches &&
     bracket &&
     (bracket.upperBracket.length > 0 ||
       bracket.lowerBracket.length > 0 ||
@@ -78,22 +94,61 @@ export default function SerieTabs({ stages }: { stages: StageData[] }) {
       <div className="bg-surface rounded-xl border border-border p-6">
         {hasBracket ? (
           <>
-            {bracket.upperBracket.length > 0 && (
-              <BracketSection
-                title={
-                  bracket.lowerBracket.length > 0 ? 'Upper Bracket' : 'Bracket'
-                }
-                rounds={
-                  bracket.grandFinal
-                    ? [...bracket.upperBracket, { label: 'Grand Final', matches: [bracket.grandFinal] }]
-                    : bracket.upperBracket
-                }
-              />
-            )}
+            <button
+              onClick={() => setBracketCollapsed(!bracketCollapsed)}
+              className="flex items-center gap-2 mb-4 text-sm font-semibold text-text-secondary hover:text-text transition-colors"
+            >
+              <svg
+                className={`w-4 h-4 transition-transform duration-200 ${bracketCollapsed ? '' : 'rotate-90'}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              {bracketCollapsed ? 'Show Bracket' : 'Hide Bracket'}
+            </button>
 
-            {bracket.lowerBracket.length > 0 && (
-              <BracketSection title="Lower Bracket" rounds={bracket.lowerBracket} />
+            {!bracketCollapsed && (
+              <>
+                {bracket.upperBracket.length > 0 && (
+                  <BracketSection
+                    title={
+                      bracket.lowerBracket.length > 0 ? 'Upper Bracket' : 'Bracket'
+                    }
+                    rounds={
+                      bracket.grandFinal
+                        ? [...bracket.upperBracket, { label: 'Grand Final', matches: [bracket.grandFinal] }]
+                        : bracket.upperBracket
+                    }
+                  />
+                )}
+
+                {bracket.lowerBracket.length > 0 && (
+                  <BracketSection title="Lower Bracket" rounds={bracket.lowerBracket} />
+                )}
+              </>
             )}
+          </>
+        ) : swissMatches ? (
+          <>
+            <button
+              onClick={() => setBracketCollapsed(!bracketCollapsed)}
+              className="flex items-center gap-2 mb-4 text-sm font-semibold text-text-secondary hover:text-text transition-colors"
+            >
+              <svg
+                className={`w-4 h-4 transition-transform duration-200 ${bracketCollapsed ? '' : 'rotate-90'}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              {bracketCollapsed ? 'Show Swiss Stage' : 'Hide Swiss Stage'}
+            </button>
+            {!bracketCollapsed && <SwissBracketSection matches={swissMatches} />}
           </>
         ) : matches.length === 0 ? (
           <p className="text-text-muted text-center py-8">
@@ -152,6 +207,15 @@ export default function SerieTabs({ stages }: { stages: StageData[] }) {
               </div>
             )}
           </>
+        )}
+
+        {/* Prize Distribution / Final Standings — only for Playoffs / Finals */}
+        {stage.standings && stage.standings.length > 0 &&
+          /playoff|final/i.test(tournament.name) && (
+          <PrizeDistribution
+            standings={stage.standings}
+            prizePool={stage.prizePool ?? null}
+          />
         )}
       </div>
     </div>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {
   PSBracketMatch,
+  PSStanding,
   PSTournament,
   TierBadge,
   parseBracket,
@@ -43,11 +44,12 @@ async function fetchSerieData(serieId: string) {
 
   // Fetch details + brackets for each tournament in parallel
   const stagePromises = tournamentsList.map(async (t) => {
-    const [detail, brackets] = await Promise.all([
+    const [detail, brackets, standingsRes] = await Promise.all([
       fetchJson(`https://api.pandascore.co/tournaments/${t.id}`) as Promise<PSTournament | null>,
       fetchJson(`https://api.pandascore.co/tournaments/${t.id}/brackets`) as Promise<PSBracketMatch[] | null>,
+      fetchJson(`https://api.pandascore.co/tournaments/${t.id}/standings`) as Promise<PSStanding[] | null>,
     ]);
-    return { detail, brackets };
+    return { detail, brackets, standings: standingsRes };
   });
 
   const stageResults = await Promise.all(stagePromises);
@@ -58,10 +60,14 @@ async function fetchSerieData(serieId: string) {
     const tournament = result.detail;
     const bracketMatches = result.brackets;
     const bracket = bracketMatches ? parseBracket(bracketMatches) : null;
+    const prizePool = (tournament as any).prizepool as string | undefined;
     stages.push({
       tournament,
       matches: tournament.matches || [],
       bracket,
+      bracketMatches: bracketMatches || undefined,
+      standings: result.standings || undefined,
+      prizePool: prizePool || null,
     });
   }
 

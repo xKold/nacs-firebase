@@ -408,6 +408,318 @@ export function BracketSection({
   );
 }
 
+// ─── Swiss Bracket ────────────────────────────────────────────────
+
+/** Detect if bracket matches look like Swiss (no tree structure) */
+export function isSwissFormat(matches: PSBracketMatch[]): boolean {
+  if (matches.length === 0) return false;
+  const noParent = matches.filter(
+    (m) => !m.previous_matches || m.previous_matches.length === 0,
+  ).length;
+  // Swiss: virtually ALL matches have no previous_matches (flat, no tree)
+  // Double-elim brackets have "round" in names too (e.g. "Lower bracket round 1")
+  // so name-checking alone is not enough — require >80% orphan matches
+  if (noParent / matches.length < 0.8) return false;
+  // And match names should have simple "Round X:" pattern (not "bracket round")
+  const swissNames = matches.filter((m) =>
+    /^Round \d+/i.test((m.name || '').trim()),
+  ).length;
+  return swissNames > matches.length * 0.5;
+}
+
+interface SwissRound {
+  label: string;
+  matches: PSBracketMatch[];
+}
+
+/** Group Swiss matches into rounds — parse "Round X" from match names first, fall back to dates */
+export function parseSwissRounds(matches: PSBracketMatch[]): SwissRound[] {
+  // Try parsing round number from match name (e.g. "Round 3: Team A vs Team B")
+  const byRoundNum = new Map<number, PSBracketMatch[]>();
+  let nameParseCount = 0;
+
+  for (const m of matches) {
+    const rMatch = (m.name || '').match(/Round\s+(\d+)/i);
+    if (rMatch) {
+      const num = parseInt(rMatch[1]);
+      if (!byRoundNum.has(num)) byRoundNum.set(num, []);
+      byRoundNum.get(num)!.push(m);
+      nameParseCount++;
+    }
+  }
+
+  // If most matches have round numbers in name, use that grouping
+  if (nameParseCount > matches.length * 0.5 && byRoundNum.size >= 2) {
+    const nums = [...byRoundNum.keys()].sort((a, b) => a - b);
+    return nums.map((num) => ({
+      label: `Round ${num}`,
+      matches: byRoundNum.get(num)!,
+    }));
+  }
+
+  // Fallback: group by date
+  const sorted = [...matches].sort((a, b) =>
+    (a.scheduled_at || '').localeCompare(b.scheduled_at || ''),
+  );
+  const dayGroups = new Map<string, PSBracketMatch[]>();
+  for (const m of sorted) {
+    const day = m.scheduled_at
+      ? new Date(m.scheduled_at).toISOString().slice(0, 10)
+      : 'unknown';
+    if (!dayGroups.has(day)) dayGroups.set(day, []);
+    dayGroups.get(day)!.push(m);
+  }
+  const days = [...dayGroups.keys()].sort();
+  if (days.length >= 2) {
+    return days.map((day, idx) => ({
+      label: `Round ${idx + 1}`,
+      matches: dayGroups.get(day)!,
+    }));
+  }
+
+  // Last fallback: equal-size chunks
+  const teamIds = new Set<number>();
+  for (const m of matches) {
+    for (const opp of m.opponents || []) {
+      if (opp.opponent?.id) teamIds.add(opp.opponent.id);
+    }
+  }
+  const mpr = Math.max(1, Math.floor(teamIds.size / 2));
+  const rounds: SwissRound[] = [];
+  for (let i = 0; i < sorted.length; i += mpr) {
+    rounds.push({ label: `Round ${rounds.length + 1}`, matches: sorted.slice(i, i + mpr) });
+  }
+  return rounds;
+}
+
+interface TeamRecord {
+  id: number;
+  name: string;
+  acronym: string | null;
+  imageUrl: string | null;
+  wins: number;
+  losses: number;
+}
+
+export function SwissBracketSection({ matches }: { matches: PSBracketMatch[] }) {
+  const rounds = parseSwissRounds(matches);
+
+  const records = new Map<number, TeamRecord>();
+  function ensureTeam(t: PSTeam) {
+    if (!records.has(t.id)) {
+      records.set(t.id, { id: t.id, name: t.name, acronym: t.acronym, imageUrl: t.image_url, wins: 0, losses: 0 });
+    }
+  }
+
+  // Build per-round W-L snapshots
+  const roundSnapshots: Map<number, TeamRecord>[] = [];
+  for (const round of rounds) {
+    for (const m of round.matches) {
+      const t1 = m.opponents?.[0]?.opponent;
+      const t2 = m.opponents?.[1]?.opponent;
+      if (t1) ensureTeam(t1);
+      if (t2) ensureTeam(t2);
+      if ((m.status === 'finished' || m.status === 'canceled') && m.winner_id) {
+        const loserId = t1?.id === m.winner_id ? t2?.id : t1?.id;
+        const wr = records.get(m.winner_id);
+        if (wr) wr.wins++;
+        if (loserId) { const lr = records.get(loserId); if (lr) lr.losses++; }
+      }
+    }
+    const snap = new Map<number, TeamRecord>();
+    for (const [id, r] of records) snap.set(id, { ...r });
+    roundSnapshots.push(snap);
+  }
+
+  const finalStandings = [...records.values()].sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    return a.losses - b.losses;
+  });
+
+  // Determine advancement thresholds (typically 3-0 = advanced in 5-round Swiss)
+  const maxRounds = rounds.length;
+  const advanceWins = Math.ceil(maxRounds / 2) + (maxRounds % 2 === 0 ? 1 : 0);
+  const eliminateLosses = advanceWins;
+
+  return (
+    <div className="mb-8">
+      <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary mb-3 px-1">
+        Swiss Stage
+      </h3>
+
+      {/* HLTV-style round columns */}
+      <div className="overflow-x-auto pb-4">
+        <div className="flex gap-3">
+          {rounds.map((round, rIdx) => {
+            // Pre-round snapshot for W-L labels
+            const preSnap = rIdx > 0 ? roundSnapshots[rIdx - 1] : null;
+            // Group matches by W-L bucket for HLTV-style sub-headers
+            const buckets = new Map<string, PSBracketMatch[]>();
+            for (const m of round.matches) {
+              const t1 = m.opponents?.[0]?.opponent;
+              const rec = preSnap && t1 ? preSnap.get(t1.id) : null;
+              const bucketKey = rec ? `${rec.wins}-${rec.losses}` : '0-0';
+              if (!buckets.has(bucketKey)) buckets.set(bucketKey, []);
+              buckets.get(bucketKey)!.push(m);
+            }
+
+            // Sort buckets: best record at top (most wins, fewest losses)
+            const sortedBucketKeys = [...buckets.keys()].sort((a, b) => {
+              const [aW, aL] = a.split('-').map(Number);
+              const [bW, bL] = b.split('-').map(Number);
+              if (bW !== aW) return bW - aW; // more wins first
+              return aL - bL; // fewer losses first
+            });
+
+            return (
+              <div key={rIdx} className="flex-shrink-0 w-[220px]">
+                <div className="text-[11px] font-semibold text-text-muted text-center mb-2 uppercase tracking-wider">
+                  {round.label}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {sortedBucketKeys.map((bucket) => {
+                    const bMatches = buckets.get(bucket)!;
+                    return (
+                    <div key={bucket}>
+                      {buckets.size > 1 && (
+                        <div className="text-[10px] text-text-muted text-center mb-1 font-medium">
+                          {bucket}
+                        </div>
+                      )}
+                      {bMatches.map((m) => {
+                        const t1 = m.opponents?.[0]?.opponent;
+                        const t2 = m.opponents?.[1]?.opponent;
+                        const s1 = t1 ? getScore(m, t1.id) : 0;
+                        const s2 = t2 ? getScore(m, t2.id) : 0;
+                        const isFinished = m.status === 'finished' || m.status === 'canceled';
+                        const postSnap = roundSnapshots[rIdx];
+                        const t1Post = postSnap && t1 ? postSnap.get(t1.id) : null;
+                        const t2Post = postSnap && t2 ? postSnap.get(t2.id) : null;
+                        const t1Advanced = t1Post && t1Post.wins >= advanceWins;
+                        const t1Eliminated = t1Post && t1Post.losses >= eliminateLosses;
+                        const t2Advanced = t2Post && t2Post.wins >= advanceWins;
+                        const t2Eliminated = t2Post && t2Post.losses >= eliminateLosses;
+
+                        const cardBorder = t1Advanced || t2Advanced
+                          ? 'border-success/30'
+                          : t1Eliminated || t2Eliminated
+                            ? 'border-live/20'
+                            : 'border-border';
+
+                        return (
+                          <Link
+                            key={m.id}
+                            href={`/matches/pro/match/${m.id}`}
+                            className={`block rounded-lg border bg-surface hover:border-accent/40 transition-all overflow-hidden mb-1.5 ${cardBorder}`}
+                          >
+                            {/* Team 1 */}
+                            <div className={`flex items-center gap-2 px-2.5 py-1.5 ${
+                              isFinished && m.winner_id !== t1?.id ? 'opacity-40' : ''
+                            } ${t1Advanced ? 'bg-success/5' : t1Eliminated ? 'bg-live/5' : ''}`}>
+                              {t1?.image_url ? (
+                                <img src={t1.image_url} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
+                              ) : <div className="w-4 h-4 flex-shrink-0" />}
+                              <span className="text-xs font-semibold text-text truncate flex-1">
+                                {t1?.acronym || t1?.name || 'TBD'}
+                              </span>
+                              {isFinished && (
+                                <span className={`text-xs font-bold min-w-[14px] text-right ${
+                                  m.winner_id === t1?.id ? 'text-success' : 'text-text-muted'
+                                }`}>{s1}</span>
+                              )}
+                            </div>
+                            <div className="border-t border-border/30" />
+                            {/* Team 2 */}
+                            <div className={`flex items-center gap-2 px-2.5 py-1.5 ${
+                              isFinished && m.winner_id !== t2?.id ? 'opacity-40' : ''
+                            } ${t2Advanced ? 'bg-success/5' : t2Eliminated ? 'bg-live/5' : ''}`}>
+                              {t2?.image_url ? (
+                                <img src={t2.image_url} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
+                              ) : <div className="w-4 h-4 flex-shrink-0" />}
+                              <span className="text-xs font-semibold text-text truncate flex-1">
+                                {t2?.acronym || t2?.name || 'TBD'}
+                              </span>
+                              {isFinished && (
+                                <span className={`text-xs font-bold min-w-[14px] text-right ${
+                                  m.winner_id === t2?.id ? 'text-success' : 'text-text-muted'
+                                }`}>{s2}</span>
+                              )}
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ); })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Final Standings */}
+      {finalStandings.length > 0 && (
+        <div className="mt-4">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-text-muted mb-2 px-1">
+            Standings
+          </h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            {finalStandings.map((t, idx) => {
+              const isAdv = t.wins >= advanceWins;
+              const isElim = t.losses >= eliminateLosses;
+              return (
+                <div
+                  key={t.id}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                    isAdv ? 'bg-success/10 border border-success/20'
+                    : isElim ? 'bg-live/5 border border-live/10 opacity-50'
+                    : 'bg-surface-hover/50 border border-border/50'
+                  }`}
+                >
+                  <span className="text-text-muted font-mono text-xs w-4">{idx + 1}</span>
+                  {t.imageUrl && <img src={t.imageUrl} alt="" className="w-4 h-4 object-contain" />}
+                  <span className="font-semibold text-text truncate flex-1 text-xs">{t.acronym || t.name}</span>
+                  <span className="text-[10px] font-bold text-success">{t.wins}</span>
+                  <span className="text-[10px] text-text-muted">-</span>
+                  <span className="text-[10px] font-bold text-live">{t.losses}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Prize Distribution ─────────────────────────────────────────────
+
+export interface PSStanding {
+  rank: number;
+  team: PSTeam;
+}
+
+export function PrizeDistribution({
+  prizePool,
+}: {
+  standings: PSStanding[];
+  prizePool: string | null;
+}) {
+  const prizeAmount = prizePool ? parseInt(prizePool.replace(/[^0-9]/g, '')) || 0 : 0;
+  if (prizeAmount <= 0) return null;
+
+  return (
+    <div className="mt-6 flex items-center gap-3 px-1">
+      <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary">
+        Prize Pool
+      </h3>
+      <span className="text-sm font-bold px-3 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+        ${prizeAmount.toLocaleString()}
+      </span>
+    </div>
+  );
+}
+
 // ─── List View Components ────────────────────────────────────────────
 
 export function ListMatchCard({ match, teams }: { match: PSMatch; teams: Map<number, PSTeam> }) {

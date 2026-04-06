@@ -2,76 +2,56 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { events, Event } from '../../static/events';
-import type { ProEvent } from '../page';
+import {
+  computeStatus,
+  type UnifiedEventDTO,
+  type UnifiedEvent,
+  type EventStatus,
+} from '@/lib/types/events';
+
+// ── Helpers ──
 
 type Filter = 'all' | 'na';
-type UnifiedEvent = {
-  id: string;
-  name: string;
-  status: 'ongoing' | 'upcoming' | 'completed';
-  startDate: string;
-  isNA: boolean;
-  tier?: string;
-  league?: string;
-  leagueImageUrl?: string | null;
-  region?: string;
-  href?: string;
-  externalUrl?: string | null;
-  source: 'faceit' | 'pandascore';
-  tournamentCount?: number;
-};
 
-function toUnified(event: Event): UnifiedEvent {
-  let href: string | undefined;
-  let externalUrl: string | null = null;
+type MonthGroup = { month: number; label: string; events: UnifiedEvent[] };
+type YearGroup = { year: number; months: MonthGroup[] };
 
-  if (event.type === 'external') {
-    externalUrl = event.externalUrl || null;
-  } else if (event.type === 'championship') {
-    href = `/matches/event/${event.id}`;
-  } else {
-    href = `/matches/events/${event.leagueId}?season=${event.seasonId}`;
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function groupByYearMonth(events: UnifiedEvent[]): YearGroup[] {
+  const yearMap = new Map<number, Map<number, UnifiedEvent[]>>();
+
+  for (const e of events) {
+    const date = e.beginAt ? new Date(e.beginAt) : null;
+    const year = date?.getFullYear() ?? new Date().getFullYear();
+    const month = date?.getMonth() ?? 0;
+
+    if (!yearMap.has(year)) yearMap.set(year, new Map());
+    const monthMap = yearMap.get(year)!;
+    if (!monthMap.has(month)) monthMap.set(month, []);
+    monthMap.get(month)!.push(e);
   }
 
-  return {
-    id: event.id,
-    name: event.name,
-    status: event.status,
-    startDate: event.startDate,
-    isNA: true,
-    region: event.region,
-    href,
-    externalUrl,
-    source: 'faceit',
-  };
+  return Array.from(yearMap.entries())
+    .sort(([a], [b]) => b - a)
+    .map(([year, monthMap]) => ({
+      year,
+      months: Array.from(monthMap.entries())
+        .sort(([a], [b]) => b - a)
+        .map(([month, evts]) => ({
+          month,
+          label: MONTH_NAMES[month],
+          events: evts.sort((a, b) =>
+            (b.beginAt || '').localeCompare(a.beginAt || ''),
+          ),
+        })),
+    }));
 }
 
-function proToUnified(event: ProEvent): UnifiedEvent {
-  // Detect serie-grouped events: id starts with "ps-serie-"
-  let href: string;
-  if (event.id.startsWith('ps-serie-')) {
-    const serieId = event.id.replace('ps-serie-', '');
-    href = `/matches/pro/serie/${serieId}`;
-  } else {
-    const psId = event.id.replace('ps-', '');
-    href = `/matches/pro/${psId}`;
-  }
-
-  return {
-    id: event.id,
-    name: event.name,
-    status: event.status,
-    startDate: event.startDate,
-    isNA: event.isNA,
-    tier: event.tier,
-    league: event.league,
-    leagueImageUrl: event.leagueImageUrl,
-    href,
-    source: 'pandascore',
-    tournamentCount: event.tournamentCount,
-  };
-}
+// ── Sub-components ──
 
 function TierBadge({ tier }: { tier: string }) {
   const styles: Record<string, string> = {
@@ -91,15 +71,15 @@ function TierBadge({ tier }: { tier: string }) {
 }
 
 function EventCard({ event }: { event: UnifiedEvent }) {
-  const isLive = event.status === 'ongoing';
+  const isLive = event.status === 'live';
   const isUpcoming = event.status === 'upcoming';
 
   const liveStyles = isLive
     ? 'border-live/30 bg-gradient-to-r from-live/5 via-surface-hover/50 to-surface-hover/50 shadow-lg shadow-live/5'
     : 'border-border bg-surface-hover/50';
 
-  const dateStr = event.startDate
-    ? new Date(event.startDate).toLocaleDateString('en-US', {
+  const dateStr = event.beginAt
+    ? new Date(event.beginAt).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
@@ -110,17 +90,15 @@ function EventCard({ event }: { event: UnifiedEvent }) {
     <div
       className={`group relative flex items-center gap-4 p-4 rounded-xl border hover:border-accent/40 hover:bg-surface-hover transition-all duration-200 ${liveStyles}`}
     >
-      {/* Live glow bar */}
       {isLive && (
         <div className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full bg-live animate-pulse" />
       )}
 
-      {/* League icon or status indicator */}
       <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center overflow-hidden">
         {event.leagueImageUrl ? (
           <img
             src={event.leagueImageUrl}
-            alt={event.league || ''}
+            alt={event.leagueName || ''}
             className="w-7 h-7 object-contain"
           />
         ) : (
@@ -130,7 +108,6 @@ function EventCard({ event }: { event: UnifiedEvent }) {
         )}
       </div>
 
-      {/* Event info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span className="font-semibold text-text group-hover:text-accent transition-colors truncate">
@@ -138,7 +115,6 @@ function EventCard({ event }: { event: UnifiedEvent }) {
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Status badge */}
           {isLive && (
             <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-live">
               <span className="w-1.5 h-1.5 rounded-full bg-live animate-pulse" />
@@ -156,37 +132,31 @@ function EventCard({ event }: { event: UnifiedEvent }) {
             </span>
           )}
 
-          {/* Tier */}
           {event.tier && <TierBadge tier={event.tier} />}
 
-          {/* Stages badge for multi-tournament series */}
           {event.tournamentCount && event.tournamentCount > 1 && (
             <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border bg-purple-500/15 text-purple-400 border-purple-500/30">
               {event.tournamentCount} stages
             </span>
           )}
 
-          {/* NA tag */}
           {event.isNA && (
             <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border bg-accent/15 text-accent border-accent/30">
               NA
             </span>
           )}
 
-          {/* Region or league */}
-          {event.region && (
-            <span className="text-xs text-text-muted">{event.region}</span>
-          )}
-          {event.league && !event.isNA && (
-            <span className="text-xs text-text-muted">{event.league}</span>
+          {event.leagueName && !event.isNA && (
+            <span className="text-xs text-text-muted">{event.leagueName}</span>
           )}
         </div>
       </div>
 
-      {/* Date + arrow */}
       <div className="flex items-center gap-3 flex-shrink-0">
         {dateStr && (
-          <span className="text-sm text-text-muted hidden sm:block">{dateStr}</span>
+          <span className="text-sm text-text-muted hidden sm:block" suppressHydrationWarning>
+            {dateStr}
+          </span>
         )}
         <svg
           className="w-4 h-4 text-text-muted group-hover:text-accent group-hover:translate-x-0.5 transition-all duration-200"
@@ -201,19 +171,7 @@ function EventCard({ event }: { event: UnifiedEvent }) {
     </div>
   );
 
-  if (event.href) {
-    return <Link href={event.href}>{inner}</Link>;
-  }
-
-  if (event.externalUrl) {
-    return (
-      <a href={event.externalUrl} target="_blank" rel="noopener noreferrer">
-        {inner}
-      </a>
-    );
-  }
-
-  return inner;
+  return <Link href={event.href}>{inner}</Link>;
 }
 
 function SectionHeader({
@@ -239,22 +197,120 @@ function SectionHeader({
   );
 }
 
-export default function EventList({ proEvents = [] }: { proEvents?: ProEvent[] }) {
-  const [filter, setFilter] = useState<Filter>('all');
+function MonthSection({ label, events }: { label: string; events: UnifiedEvent[] }) {
+  return (
+    <div className="mt-4 first:mt-0">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2 pl-1">
+        {label}
+      </h3>
+      <div className="flex flex-col gap-2">
+        {events.map((e) => (
+          <EventCard key={e.id} event={e} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  // Combine all events into one list
-  const allEvents: UnifiedEvent[] = [
-    ...events.map(toUnified),
-    ...proEvents.map(proToUnified),
-  ];
+function YearSection({ group, expanded, onToggle }: {
+  group: YearGroup;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const totalEvents = group.months.reduce((sum, m) => sum + m.events.length, 0);
+
+  return (
+    <div className="mt-4">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-2 py-3 px-1 text-sm font-semibold text-text-secondary hover:text-text transition-colors"
+      >
+        <svg
+          className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        View {group.year}
+        <span className="text-xs text-text-muted font-normal">
+          ({totalEvents} event{totalEvents !== 1 ? 's' : ''})
+        </span>
+      </button>
+      {expanded && (
+        <div className="pl-2">
+          {group.months.map((m) => (
+            <MonthSection key={m.month} label={m.label} events={m.events} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main component ──
+
+export default function EventList({
+  events: dtos,
+  loading = false,
+}: {
+  events: UnifiedEventDTO[];
+  loading?: boolean;
+}) {
+  const [filter, setFilter] = useState<Filter>('all');
+  const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
+
+  // Compute status client-side from timestamps on every render
+  const enriched: UnifiedEvent[] = dtos.map((e) => ({
+    ...e,
+    status: computeStatus(e.beginAt, e.endAt),
+  }));
 
   // Apply filter
-  const filtered = filter === 'na' ? allEvents.filter((e) => e.isNA) : allEvents;
+  const filtered = filter === 'na' ? enriched.filter((e) => e.isNA) : enriched;
 
-  // Group by status
-  const live = filtered.filter((e) => e.status === 'ongoing');
-  const upcoming = filtered.filter((e) => e.status === 'upcoming');
+  // Separate active from completed
+  const live = filtered.filter((e) => e.status === 'live');
+  const upcoming = filtered
+    .filter((e) => e.status === 'upcoming')
+    .sort((a, b) => (a.beginAt || '').localeCompare(b.beginAt || ''));
   const completed = filtered.filter((e) => e.status === 'completed');
+
+  // Group completed by year/month
+  const currentYear = new Date().getFullYear();
+  const currentYearCompleted = completed.filter((e) => {
+    const y = e.beginAt ? new Date(e.beginAt).getFullYear() : null;
+    return y === currentYear;
+  });
+  const priorCompleted = completed.filter((e) => {
+    const y = e.beginAt ? new Date(e.beginAt).getFullYear() : null;
+    return y !== null && y < currentYear;
+  });
+
+  const currentYearMonths = groupByYearMonth(currentYearCompleted)[0]?.months || [];
+  const priorYearGroups = groupByYearMonth(priorCompleted);
+
+  const toggleYear = (year: number) => {
+    setExpandedYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-surface rounded-xl border border-border p-8">
+        <div className="flex items-center gap-3 text-text-secondary">
+          <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          Loading events...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -290,9 +346,8 @@ export default function EventList({ proEvents = [] }: { proEvents?: ProEvent[] }
         </div>
       </div>
 
-      {/* Event Sections */}
       <div className="bg-surface rounded-xl border border-border p-6">
-        {live.length === 0 && upcoming.length === 0 && completed.length === 0 ? (
+        {filtered.length === 0 ? (
           <p className="text-text-muted text-center py-8">No events found.</p>
         ) : (
           <>
@@ -332,23 +387,33 @@ export default function EventList({ proEvents = [] }: { proEvents?: ProEvent[] }
               </div>
             )}
 
-            {/* Completed */}
-            <SectionHeader
-              title="Completed"
-              count={completed.length}
-              icon={
-                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-text-muted/20">
-                  <span className="w-2 h-2 rounded-full bg-text-muted" />
-                </span>
-              }
-            />
-            {completed.length > 0 && (
-              <div className="flex flex-col gap-2">
-                {completed.map((e) => (
-                  <EventCard key={e.id} event={e} />
+            {/* Current year - months */}
+            {currentYearMonths.length > 0 && (
+              <>
+                <SectionHeader
+                  title={String(currentYear)}
+                  count={currentYearCompleted.length}
+                  icon={
+                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-text-muted/20">
+                      <span className="w-2 h-2 rounded-full bg-text-muted" />
+                    </span>
+                  }
+                />
+                {currentYearMonths.map((m) => (
+                  <MonthSection key={m.month} label={m.label} events={m.events} />
                 ))}
-              </div>
+              </>
             )}
+
+            {/* Prior years - collapsible */}
+            {priorYearGroups.map((g) => (
+              <YearSection
+                key={g.year}
+                group={g}
+                expanded={expandedYears.has(g.year)}
+                onToggle={() => toggleYear(g.year)}
+              />
+            ))}
           </>
         )}
       </div>

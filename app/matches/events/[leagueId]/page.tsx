@@ -2,7 +2,6 @@
 // This component helps identify the correct API structure and endpoints
 
 import Link from 'next/link';
-import { getEventByLeagueAndSeason } from '../../../../static/events';
 
 export default async function Page({
   params,
@@ -29,7 +28,7 @@ export default async function Page({
   const debugMode = resolvedSearchParams?.debug === 'true';
   const testMode = resolvedSearchParams?.test === 'true';
 
-  const eventInfo = seasonId ? getEventByLeagueAndSeason(leagueId, seasonId) : null;
+  const eventInfo = null; // diagnostic page — no longer backed by static events config
 
   // Test different API endpoints to find the right structure
   const testResults: any = {};
@@ -268,7 +267,7 @@ export default async function Page({
         <ul>
           <li><strong>League ID:</strong> {leagueId}</li>
           <li><strong>Season ID:</strong> {seasonId}</li>
-          <li><strong>Event:</strong> {eventInfo?.name || 'Not found'}</li>
+          <li><strong>Event:</strong> Not found</li>
           <li><strong>API Key:</strong> {process.env.FACEIT_API_KEY ? 'Present' : 'Missing'}</li>
         </ul>
       </div>

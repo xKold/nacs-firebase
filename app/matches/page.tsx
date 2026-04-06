@@ -1,453 +1,164 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { getEventById, getEventByLeagueAndSeason, events } from '../../static/events';
+import RankingSidebar from '../components/RankingSidebar';
 
-interface Match {
-  match_id: string;
-  status: string;
-  competition_id?: string;
-  results?: {
-    score?: {
-      faction1?: number;
-      faction2?: number;
-    };
-  };
-  teams:
-    | {
-        faction1?: { name: string; faction_id?: string };
-        faction2?: { name: string; faction_id?: string };
-        nickname?: string;
-      }
-    | Array<{ nickname?: string; name?: string; faction_id?: string }>;
-  scheduled_at?: number;
-  started_at?: number;
-  start_date?: string;
+interface LiveMatch {
+  id: string | number;
+  team1: string;
+  team2: string;
+  team1Logo: string | null;
+  team2Logo: string | null;
+  score1: number;
+  score2: number;
+  status: 'live' | 'upcoming' | 'finished';
+  event: string;
+  bestOf: number;
+  scheduledAt: string | null;
+  href: string;
+  source: 'faceit' | 'pandascore';
 }
 
-interface ProEvent {
-  id: number;
-  name: string;
-  leagueName: string;
-  leagueImageUrl: string | null;
-  leagueId: number;
-  beginAt: string | null;
-  endAt: string | null;
-  year: number | null;
-  tier: string;
-  status: 'upcoming' | 'ongoing' | 'completed';
-}
-
-function MatchesContent() {
-  const [matches, setMatches] = useState<Match[]>([]);
+export default function MatchesPage() {
+  const [matches, setMatches] = useState<LiveMatch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedEvent, setSelectedEvent] = useState<string>('');
-  const [proEvents, setProEvents] = useState<ProEvent[]>([]);
-  const [proLoading, setProLoading] = useState(true);
-
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const eventIdFromUrl = searchParams.get('event');
 
   useEffect(() => {
-    if (eventIdFromUrl) {
-      setSelectedEvent(eventIdFromUrl);
-    } else {
-      setSelectedEvent(events[0].id);
-    }
-  }, [eventIdFromUrl]);
-
-  // Fetch pro events from PandaScore
-  useEffect(() => {
-    fetch('/api/pro-events')
+    fetch('/api/live-matches')
       .then((res) => res.json())
-      .then((data) => setProEvents(data.series || []))
-      .catch(() => setProEvents([]))
-      .finally(() => setProLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (!selectedEvent) return;
-
-    let event = getEventById(selectedEvent);
-
-    if (!event) {
-      const leagueId = searchParams.get('leagueId');
-      const seasonId = searchParams.get('seasonId');
-      if (leagueId && seasonId) {
-        event = getEventByLeagueAndSeason(leagueId, seasonId);
-      }
-    }
-
-    if (!event) {
-      setMatches([]);
-      setLoading(false);
-      return;
-    }
-
-    let url = '/api/matches?';
-
-    if (event.type === 'championship') {
-      url += `championshipId=${event.id}`;
-    } else if (event.leagueId && event.seasonId) {
-      url += `leagueId=${event.leagueId}&seasonId=${event.seasonId}`;
-    } else {
-      setMatches([]);
-      setLoading(false);
-      return;
-    }
-
-    fetch(url)
-      .then((res) => res.json())
-      .then((data) => {
-        setMatches(data.items || []);
-      })
+      .then((data) => setMatches(data.matches || []))
       .catch(() => setMatches([]))
       .finally(() => setLoading(false));
-  }, [selectedEvent, searchParams]);
+  }, []);
 
-  const currentEvent = getEventById(selectedEvent);
+  const live = matches.filter((m) => m.status === 'live');
+  const upcoming = matches.filter((m) => m.status === 'upcoming');
+  const recent = matches.filter((m) => m.status === 'finished');
 
-  if (loading) {
+  const renderMatch = (m: LiveMatch) => {
+    const isLive = m.status === 'live';
+    const isFinished = m.status === 'finished';
+
+    const timeStr = m.scheduledAt
+      ? new Date(m.scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      : '';
+    const dateStr = m.scheduledAt
+      ? new Date(m.scheduledAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : '';
+
     return (
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="bg-surface rounded-xl border border-border p-8">
-          <div className="flex items-center gap-3 text-text-secondary">
+      <Link
+        key={`${m.source}-${m.id}`}
+        href={m.href}
+        className={`relative flex items-center gap-4 p-4 rounded-xl border transition-all duration-200 hover:border-accent/40 ${
+          isLive
+            ? 'border-live/30 bg-gradient-to-r from-live/5 via-surface-hover/50 to-surface-hover/50 shadow-lg shadow-live/5'
+            : 'border-border bg-surface-hover/50'
+        }`}
+      >
+        {isLive && <div className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full bg-live animate-pulse" />}
+
+        <div className="hidden sm:flex flex-col items-center gap-1 flex-shrink-0 w-20">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">BO{m.bestOf}</span>
+          {isLive && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-live">
+              <span className="w-1.5 h-1.5 rounded-full bg-live animate-pulse" />Live
+            </span>
+          )}
+          {!isLive && !isFinished && dateStr && (
+            <span className="text-[11px] text-text-muted" suppressHydrationWarning>{dateStr}</span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+          <span className="font-semibold text-text truncate">{m.team1}</span>
+          {m.team1Logo && <img src={m.team1Logo} alt="" className="w-7 h-7 object-contain flex-shrink-0" />}
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0 px-2">
+          {isFinished || isLive ? (
+            <>
+              <span className="text-xl font-bold w-6 text-right text-text">{m.score1}</span>
+              <span className="text-text-muted text-sm">-</span>
+              <span className="text-xl font-bold w-6 text-left text-text">{m.score2}</span>
+            </>
+          ) : (
+            <span className="text-sm text-text-muted font-medium px-2" suppressHydrationWarning>{timeStr || 'TBD'}</span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {m.team2Logo && <img src={m.team2Logo} alt="" className="w-7 h-7 object-contain flex-shrink-0" />}
+          <span className="font-semibold text-text truncate">{m.team2}</span>
+        </div>
+
+        <div className="hidden sm:block flex-shrink-0">
+          <span className="text-[10px] text-text-muted truncate max-w-[120px] inline-block">{m.event}</span>
+        </div>
+      </Link>
+    );
+  };
+
+  const renderSection = (title: string, items: LiveMatch[], icon: React.ReactNode) => {
+    if (items.length === 0) return null;
+    return (
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          {icon}
+          <h2 className="text-sm font-bold uppercase tracking-wider text-text-secondary">{title}</h2>
+          <span className="text-xs text-text-muted bg-surface-hover px-2 py-0.5 rounded-full">{items.length}</span>
+        </div>
+        <div className="flex flex-col gap-2">{items.map(renderMatch)}</div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="relative max-w-5xl mx-auto px-4">
+      {/* Rankings sidebar — positioned to the left, doesn't affect layout */}
+      <div className="hidden xl:block absolute right-full mr-4 top-0 w-[200px]">
+        <div className="sticky top-20">
+          <RankingSidebar />
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex items-end justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Matches</h1>
+          <p className="text-text-secondary text-sm mt-1">Live and upcoming NA matches</p>
+        </div>
+      </div>
+
+      <div className="bg-surface rounded-xl border border-border p-6">
+        {loading ? (
+          <div className="flex items-center gap-3 text-text-secondary py-8">
             <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
             Loading matches...
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Categorize matches (case-insensitive status)
-  const now = Date.now();
-  const ongoing: Match[] = [];
-  const upcoming: Match[] = [];
-  const completed: Match[] = [];
-
-  matches.forEach((match) => {
-    const status = match.status?.toLowerCase();
-    const start =
-      typeof match.scheduled_at === 'number'
-        ? match.scheduled_at * 1000
-        : typeof match.started_at === 'number'
-        ? match.started_at * 1000
-        : NaN;
-
-    if (status === 'ongoing') {
-      ongoing.push(match);
-    } else if (status === 'finished') {
-      completed.push(match);
-    } else if (!isNaN(start) && start <= now) {
-      completed.push(match);
-    } else {
-      upcoming.push(match);
-    }
-  });
-
-  const sortByStartTime = (a: Match, b: Match) => {
-    const aStart = ((a.scheduled_at ?? a.started_at) ?? 0) * 1000;
-    const bStart = ((b.scheduled_at ?? b.started_at) ?? 0) * 1000;
-    return aStart - bStart;
-  };
-  ongoing.sort(sortByStartTime);
-  upcoming.sort(sortByStartTime);
-  completed.sort(sortByStartTime);
-
-  const getTeamInfo = (match: Match) => {
-    let faction1 = 'TBD';
-    let faction2 = 'TBD';
-    let team1Id: string | undefined;
-    let team2Id: string | undefined;
-
-    if (Array.isArray(match.teams)) {
-      faction1 = match.teams[0]?.nickname || match.teams[0]?.name || 'TBD';
-      faction2 = match.teams[1]?.nickname || match.teams[1]?.name || 'TBD';
-      team1Id = match.teams[0]?.faction_id;
-      team2Id = match.teams[1]?.faction_id;
-    } else if (match.teams) {
-      faction1 = match.teams.faction1?.name || 'TBD';
-      faction2 = match.teams.faction2?.name || 'TBD';
-      team1Id = match.teams.faction1?.faction_id;
-      team2Id = match.teams.faction2?.faction_id;
-    }
-
-    return { faction1, faction2, team1Id, team2Id };
-  };
-
-  const renderTeamName = (name: string, teamId: string | undefined) => {
-    if (teamId) {
-      return (
-        <Link
-          href={`/teams/${teamId}?championship=${selectedEvent}`}
-          onClick={(e) => e.stopPropagation()}
-          className="font-semibold text-text hover:text-accent transition-colors"
-        >
-          {name}
-        </Link>
-      );
-    }
-    return <span className="font-semibold text-text">{name}</span>;
-  };
-
-  const renderMatch = (match: Match) => {
-    const { faction1, faction2, team1Id, team2Id } = getTeamInfo(match);
-    const status = match.status?.toLowerCase();
-    const isLive = status === 'ongoing';
-    const isFinished = status === 'finished';
-
-    const rawTime = match.scheduled_at || match.started_at || 0;
-    const time = rawTime
-      ? new Date(rawTime * 1000).toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-        })
-      : 'TBD';
-
-    const score1 = match.results?.score?.faction1;
-    const score2 = match.results?.score?.faction2;
-    const hasScore = score1 !== undefined && score2 !== undefined;
-
-    return (
-      <div
-        key={match.match_id}
-        onClick={() => router.push(`/matches/match/${match.match_id}`)}
-        className="group flex items-center justify-between p-4 rounded-lg bg-surface-hover/50 border border-border hover:border-accent/40 hover:bg-surface-hover transition-all duration-200 cursor-pointer"
-      >
-        <div className="flex items-center gap-3">
-          {isLive && (
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-live">
-              <span className="w-2 h-2 rounded-full bg-live animate-pulse" />
-              LIVE
-            </span>
-          )}
-          {renderTeamName(faction1, team1Id)}
-          {hasScore ? (
-            <span className="text-sm font-bold text-text-secondary">
-              {score1} - {score2}
-            </span>
-          ) : (
-            <span className="text-text-muted text-sm">vs</span>
-          )}
-          {renderTeamName(faction2, team2Id)}
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-text-muted">{time}</span>
-          <span
-            className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${
-              isLive
-                ? 'bg-live/10 text-live'
-                : isFinished
-                ? 'bg-success/10 text-success'
-                : 'bg-warning/10 text-warning'
-            }`}
-          >
-            {match.status}
-          </span>
-        </div>
-      </div>
-    );
-  };
-
-  const renderSection = (title: string, sectionMatches: Match[], badgeColor: string) => {
-    if (sectionMatches.length === 0) return null;
-    return (
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-3">
-          <span className={`w-2 h-2 rounded-full ${badgeColor}`} />
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <span className="text-xs text-text-muted">({sectionMatches.length})</span>
-        </div>
-        <div className="flex flex-col gap-2">
-          {sectionMatches.map(renderMatch)}
-        </div>
-      </div>
-    );
-  };
-
-  // Group pro events by status
-  const proOngoing = proEvents.filter((e) => e.status === 'ongoing');
-  const proUpcoming = proEvents.filter((e) => e.status === 'upcoming');
-  const proCompleted = proEvents.filter((e) => e.status === 'completed');
-
-  return (
-    <div className="max-w-4xl mx-auto px-4 flex flex-col gap-6">
-      {/* FACEIT Events */}
-      <div className="bg-surface rounded-xl border border-border p-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold">
-              {currentEvent?.name || 'Event'} Matches
-            </h1>
-            {currentEvent && (
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent mt-1 inline-block">
-                {currentEvent.type === 'championship' ? 'Championship' : 'League'}
-              </span>
-            )}
-          </div>
-          <select
-            value={selectedEvent}
-            onChange={(e) => setSelectedEvent(e.target.value)}
-            className="bg-surface-hover border border-border rounded-lg px-4 py-2 text-sm text-text focus:outline-none focus:border-accent transition-colors"
-          >
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {ongoing.length === 0 && upcoming.length === 0 && completed.length === 0 && (
-          <p className="text-text-muted text-center py-8">No matches found.</p>
-        )}
-        {renderSection('Ongoing', ongoing, 'bg-live')}
-        {renderSection('Upcoming', upcoming, 'bg-warning')}
-        {renderSection('Completed', completed, 'bg-success')}
-      </div>
-
-      {/* Pro Events (dynamically fetched from PandaScore) */}
-      <div className="bg-surface rounded-xl border border-border p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-bold">Pro Events</h2>
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 mt-1 inline-block">
-              PandaScore
-            </span>
-          </div>
-        </div>
-
-        {proLoading ? (
-          <div className="flex items-center gap-3 text-text-secondary py-4">
-            <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-            Loading pro events...
-          </div>
-        ) : proEvents.length === 0 ? (
-          <p className="text-text-muted text-center py-8">No pro events found.</p>
+        ) : matches.length === 0 ? (
+          <p className="text-text-muted text-center py-8">No live or upcoming matches right now.</p>
         ) : (
           <>
-            {/* Ongoing */}
-            {proOngoing.length > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-2 h-2 rounded-full bg-live" />
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary">Live</h3>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {proOngoing.map((e) => (
-                    <ProEventCard key={e.id} event={e} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Upcoming */}
-            {proUpcoming.length > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-2 h-2 rounded-full bg-warning" />
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary">Upcoming</h3>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {proUpcoming.map((e) => (
-                    <ProEventCard key={e.id} event={e} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Completed */}
-            {proCompleted.length > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-2 h-2 rounded-full bg-success" />
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary">Completed</h3>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {proCompleted.map((e) => (
-                    <ProEventCard key={e.id} event={e} />
-                  ))}
-                </div>
-              </div>
-            )}
+            {renderSection('Live Now', live, (
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-live/20">
+                <span className="w-2 h-2 rounded-full bg-live animate-pulse" />
+              </span>
+            ))}
+            {renderSection('Upcoming', upcoming, (
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-warning/20">
+                <span className="w-2 h-2 rounded-full bg-warning" />
+              </span>
+            ))}
+            {renderSection('Recently Completed', recent, (
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-text-muted/20">
+                <span className="w-2 h-2 rounded-full bg-text-muted" />
+              </span>
+            ))}
           </>
         )}
       </div>
     </div>
-  );
-}
-
-function ProEventCard({ event }: { event: ProEvent }) {
-  const dateRange = [
-    event.beginAt
-      ? new Date(event.beginAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      : null,
-    event.endAt
-      ? new Date(event.endAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      : null,
-  ]
-    .filter(Boolean)
-    .join(' \u2014 ');
-
-  return (
-    <Link
-      href={`/matches/pro/serie/${event.id}`}
-      className="group flex items-center justify-between p-4 rounded-lg bg-surface-hover/50 border border-border hover:border-accent/40 hover:bg-surface-hover transition-all duration-200"
-    >
-      <div className="flex items-center gap-3">
-        {event.leagueImageUrl && (
-          <img src={event.leagueImageUrl} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
-        )}
-        <span className="font-semibold text-text group-hover:text-accent transition-colors">
-          {event.leagueName}: {event.name}
-        </span>
-        {event.status === 'ongoing' && (
-          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-live">
-            <span className="w-1.5 h-1.5 rounded-full bg-live animate-pulse" />
-            Live
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-3">
-        {dateRange && (
-          <span className="text-xs text-text-muted hidden sm:inline" suppressHydrationWarning>
-            {dateRange}
-          </span>
-        )}
-        <span
-          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-            event.status === 'ongoing'
-              ? 'bg-live/10 text-live'
-              : event.status === 'upcoming'
-                ? 'bg-warning/10 text-warning'
-                : 'bg-success/10 text-success'
-          }`}
-        >
-          {event.status === 'ongoing' ? 'Live' : event.status === 'upcoming' ? 'Upcoming' : 'Completed'}
-        </span>
-      </div>
-    </Link>
-  );
-}
-
-export default function MatchesPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="bg-surface rounded-xl border border-border p-8 text-text-secondary">
-            Loading...
-          </div>
-        </div>
-      }
-    >
-      <MatchesContent />
-    </Suspense>
   );
 }
