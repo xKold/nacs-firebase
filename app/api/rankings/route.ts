@@ -10,6 +10,19 @@ interface VRSTeam {
 const VALID_REGIONS = ['americas', 'europe', 'asia', 'global'] as const;
 type Region = (typeof VALID_REGIONS)[number];
 
+// Valve usually publishes new VRS standings within the first ~10 days of each
+// month. Check aggressively during days 1–15 (with timezone/late-publish buffer)
+// and rest for the remainder of the month.
+function getVrsRevalidate(): number {
+  const day = new Date().getUTCDate();
+  return day <= 15 ? 600 : 43200; // 10 min during update window, 12 h otherwise
+}
+
+function githubHeaders(): HeadersInit {
+  const token = process.env.GITHUB_TOKEN;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function parseMarkdownTable(md: string): VRSTeam[] {
   const lines = md.split('\n');
   const teams: VRSTeam[] = [];
@@ -36,11 +49,13 @@ export async function GET(request: NextRequest) {
   const region = (request.nextUrl.searchParams.get('region') || 'americas') as Region;
   const validRegion = VALID_REGIONS.includes(region) ? region : 'americas';
 
+  const revalidate = getVrsRevalidate();
+
   try {
     // Find the latest year folder
     const yearRes = await fetch(
       'https://api.github.com/repos/ValveSoftware/counter-strike_regional_standings/contents/live',
-      { next: { revalidate: 3600 } },
+      { headers: githubHeaders(), next: { revalidate } },
     );
 
     if (!yearRes.ok) {
@@ -60,7 +75,7 @@ export async function GET(request: NextRequest) {
 
     const indexRes = await fetch(
       `https://api.github.com/repos/ValveSoftware/counter-strike_regional_standings/contents/live/${latestYear}`,
-      { next: { revalidate: 3600 } },
+      { headers: githubHeaders(), next: { revalidate } },
     );
 
     if (!indexRes.ok) {
@@ -83,7 +98,7 @@ export async function GET(request: NextRequest) {
       : null;
 
     const mdRes = await fetch(latestFile.download_url, {
-      next: { revalidate: 3600 },
+      next: { revalidate },
     });
 
     if (!mdRes.ok) {
