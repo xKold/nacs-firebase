@@ -4,6 +4,7 @@ import './globals.css';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import SearchBar from './components/SearchBar';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [scrolled, setScrolled] = useState(false);
@@ -58,6 +59,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               >
                 Rankings
               </Link>
+              <SearchBar />
             </div>
           </div>
         </nav>

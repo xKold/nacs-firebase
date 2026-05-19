@@ -16,6 +16,9 @@
 /.next/
 /out/
 
+# firebase local build artifacts
+/.firebase/
+
 # production
 /build
 
