@@ -268,7 +268,6 @@ export default async function Page({
           <li><strong>League ID:</strong> {leagueId}</li>
           <li><strong>Season ID:</strong> {seasonId}</li>
           <li><strong>Event:</strong> Not found</li>
-          <li><strong>API Key:</strong> {process.env.FACEIT_API_KEY ? 'Present' : 'Missing'}</li>
         </ul>
       </div>
 
