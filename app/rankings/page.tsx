@@ -152,8 +152,20 @@ export default function RankingsPage() {
                       {t.points.toLocaleString()}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-text-muted text-xs hidden md:table-cell">
-                    {t.roster.join(', ')}
+                  <td className="px-4 py-3 text-xs hidden md:table-cell">
+                    {t.roster.map((p, i) => (
+                      <span key={`${t.rank}-${p}`}>
+                        <Link
+                          href={`/players/lookup?nick=${encodeURIComponent(p)}`}
+                          className="text-text-muted hover:text-accent hover:underline transition-colors"
+                        >
+                          {p}
+                        </Link>
+                        {i < t.roster.length - 1 && (
+                          <span className="text-text-muted">, </span>
+                        )}
+                      </span>
+                    ))}
                   </td>
                 </tr>
               ))}
