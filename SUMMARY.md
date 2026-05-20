@@ -48,7 +48,6 @@
 |--------|---------|-------------|
 | FACEIT Data API v4 | ESEA matches, standings, player stats, team rosters | `.env.local` → `FACEIT_API_KEY` |
 | PandaScore | Pro CS2 event listings, brackets, rosters, match scores | `.env.local` → `PANDASCORE_API_KEY` |
-| Liquipedia | (Future) Detailed match stats (K/D, ADR, Rating) | Waiting for API key |
 
 ## Known Issues
 - `@g-loot/react-tournament-brackets` has peer dep on React 18 (works fine with 19, just npm warnings)
@@ -57,29 +56,19 @@
 
 ## Next Steps
 
-### Priority 1: Liquipedia API Integration
-- Waiting for API key approval
-- Will provide detailed match stats (K/D, ADR, KAST, Rating) that PandaScore free tier lacks
-- Normalized stats types + MatchStatsTable component already built and ready to accept a new data source
-
-### Priority 2: Match Page Enhancements
-- Per-player stats for PandaScore matches (blocked on Liquipedia API key)
+### Priority 1: Match Page Enhancements
 - BO1 display: hide "Overall" tab when only 1 map
 - Round-by-round timeline if API supports it
 
-### Priority 3: Standings Visual Improvement
+### Priority 2: Standings Visual Improvement
 - Team logos, alternating row backgrounds, better spacing
 - Games played column, win percentage, form indicator (last 5 results)
 - Group labels if championship has groups
 
-### Priority 4: Player Page Overhaul (HLTV-style)
+### Priority 3: Player Page Overhaul (HLTV-style)
 - Rating, impact, opening kills, clutch stats
 - Per-map breakdown, performance trends, head-to-head records
 
-### Priority 5: Search Feature
-- Search players by nickname, teams by name
-- FACEIT search API with autocomplete/typeahead
-
-### Priority 6: Auto-Fetch ESEA Events
+### Priority 4: Auto-Fetch ESEA Events
 - ESEA Organizer ID: `08b06cfc-74d0-454b-9a51-feda4b6b18da`
 - Replace hardcoded `static/events.ts` with dynamic fetching via `/organizers/{id}/championships`

@@ -16,8 +16,15 @@ export default function SearchBar() {
   const [results, setResults] = useState<SearchResponse>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  // Autofocus the input when the bar expands
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
 
   // Debounced fetch
   useEffect(() => {
@@ -40,11 +47,17 @@ export default function SearchBar() {
     return () => clearTimeout(handle);
   }, [query]);
 
+  function collapse() {
+    setOpen(false);
+    setExpanded(false);
+    setQuery('');
+  }
+
   // Click outside to close
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
+        collapse();
       }
     }
     document.addEventListener('mousedown', onClickOutside);
@@ -54,7 +67,7 @@ export default function SearchBar() {
   // Esc to close
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') collapse();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -64,7 +77,7 @@ export default function SearchBar() {
     e.preventDefault();
     const q = query.trim();
     if (q.length < MIN_QUERY) return;
-    setOpen(false);
+    collapse();
     router.push(`/search?q=${encodeURIComponent(q)}`);
   }
 
@@ -77,20 +90,56 @@ export default function SearchBar() {
   const showDropdown = open && query.trim().length >= MIN_QUERY;
 
   return (
-    <div ref={wrapperRef} className="relative">
-      <form onSubmit={onSubmit}>
+    <div ref={wrapperRef} className="relative flex items-center">
+      <form
+        onSubmit={onSubmit}
+        className={`overflow-hidden transition-all duration-200 ease-out ${
+          expanded ? 'w-44 sm:w-64 opacity-100 mr-2' : 'w-0 opacity-0 mr-0'
+        }`}
+      >
         <input
+          ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}
           placeholder="Search events, teams, players..."
-          className="w-44 sm:w-64 bg-surface/70 border border-border rounded-md px-3 py-1.5 text-sm text-text placeholder-text-muted focus:outline-none focus:border-accent/60 focus:bg-surface transition-colors"
+          tabIndex={expanded ? 0 : -1}
+          className="w-full bg-surface-hover border border-border rounded-md px-3 py-1.5 text-sm text-text placeholder-text-muted focus:outline-none focus:border-accent/60 transition-colors"
         />
       </form>
 
-      {showDropdown && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-surface border border-border rounded-lg shadow-xl shadow-black/40 overflow-hidden z-50">
+      <button
+        type="button"
+        aria-label={expanded ? 'Close search' : 'Open search'}
+        onClick={() => {
+          if (expanded) {
+            collapse();
+          } else {
+            setExpanded(true);
+            setOpen(true);
+          }
+        }}
+        className="w-8 h-8 flex items-center justify-center rounded-md text-white/80 hover:text-white hover:bg-surface-hover transition-colors"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+      </button>
+
+      {showDropdown && expanded && (
+        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-surface border border-border rounded-lg shadow-xl shadow-black/40 overflow-hidden z-50">
           {loading && totalResults === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-text-muted">
               Searching...
@@ -101,14 +150,14 @@ export default function SearchBar() {
             </div>
           ) : (
             <>
-              <Section title="Events" results={results.events} onPick={() => setOpen(false)} />
-              <Section title="Teams" results={results.teams} onPick={() => setOpen(false)} />
-              <Section title="Players" results={results.players} onPick={() => setOpen(false)} />
+              <Section title="Events" results={results.events} onPick={collapse} />
+              <Section title="Teams" results={results.teams} onPick={collapse} />
+              <Section title="Players" results={results.players} onPick={collapse} />
 
               {hasOverflow && (
                 <Link
                   href={`/search?q=${encodeURIComponent(query.trim())}`}
-                  onClick={() => setOpen(false)}
+                  onClick={collapse}
                   className="block px-4 py-2.5 text-center text-xs font-semibold text-accent hover:bg-surface-hover border-t border-border transition-colors"
                 >
                   See all results →

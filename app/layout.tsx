@@ -18,24 +18,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        {/* Navigation Bar - overlays banner, becomes sticky on scroll */}
-        <nav
-          className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-            scrolled
-              ? 'bg-surface/95 backdrop-blur-md shadow-lg shadow-black/20'
-              : 'bg-transparent'
-          }`}
-        >
+        {/* Navigation Bar - always opaque, logo grows after scrolling past banner */}
+        <nav className="fixed top-0 left-0 right-0 z-50 bg-surface/95 backdrop-blur-md shadow-lg shadow-black/20">
           <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-3 group">
               <Image
                 src="/icon.png"
                 alt="NACS"
-                width={32}
-                height={32}
-                className="rounded-full transition-transform duration-200 group-hover:scale-110"
+                width={48}
+                height={48}
+                className={`rounded-full transition-all duration-300 group-hover:scale-110 ${
+                  scrolled ? 'w-11 h-11' : 'w-8 h-8'
+                }`}
               />
-              <span className="text-lg font-bold tracking-wide text-white drop-shadow-md">
+              <span
+                className={`font-bold tracking-wide text-white drop-shadow-md transition-all duration-300 ${
+                  scrolled ? 'text-xl' : 'text-lg'
+                }`}
+              >
                 NACS
               </span>
             </Link>
@@ -59,13 +59,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               >
                 Rankings
               </Link>
+              <Link
+                href="/roadmap"
+                className="text-sm font-medium text-white/80 hover:text-white transition-colors duration-200 drop-shadow-sm"
+              >
+                Roadmap
+              </Link>
               <SearchBar />
             </div>
           </div>
         </nav>
 
-        {/* Banner - full width, fully visible */}
-        <div className="relative w-full">
+        {/* Spacer so the banner begins below the fixed nav, not under it */}
+        <div className="h-14" />
+
+        {/* Banner - cropped at the bottom so main content sits higher */}
+        <div
+          className="relative w-full overflow-hidden"
+          style={{ aspectRatio: '3000 / 520' }}
+        >
           <Image
             src="/bannerfix.png"
             alt="NACS Banner"
