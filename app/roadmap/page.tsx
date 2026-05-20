@@ -1,4 +1,5 @@
 import SuggestionsCard from '@/app/components/SuggestionsCard';
+import SocialsCard from '@/app/components/SocialsCard';
 
 const ROADMAP: { title: string; bullets: string[] }[] = [
   {
@@ -83,9 +84,12 @@ export default function RoadmapPage() {
           </div>
         </div>
 
-        {/* Suggestions sidebar */}
+        {/* Sidebar — sticky container so both cards stay together when scrolling */}
         <aside className="lg:col-span-1">
-          <SuggestionsCard />
+          <div className="lg:sticky lg:top-20 space-y-4">
+            <SuggestionsCard />
+            <SocialsCard />
+          </div>
         </aside>
       </div>
     </div>

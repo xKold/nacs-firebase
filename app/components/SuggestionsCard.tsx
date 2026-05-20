@@ -18,7 +18,7 @@ export default function SuggestionsCard() {
   }
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-5 lg:sticky lg:top-20">
+    <div className="bg-surface rounded-xl border border-border p-5">
       <h2 className="text-lg font-bold text-white">Have a Suggestion?</h2>
       <p className="text-sm text-text-muted mt-1.5">
         Send ideas, bug reports, or feature requests to my inbox.
