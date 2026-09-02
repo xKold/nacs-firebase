@@ -17,6 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="en">
+      <head>
+        <meta name="google-site-verification" content="spjWP5iN5ExwWl1QhxAreYkKIC5TqHC_GDktu9OJIF8" />
+      </head>
       <body>
         {/* Navigation Bar - always opaque, logo grows after scrolling past banner */}
         <nav className="fixed top-0 left-0 right-0 z-50 bg-surface/95 backdrop-blur-md shadow-lg shadow-black/20">
