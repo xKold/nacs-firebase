@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import EventBracket, { type BracketData, type MatchScoreMap } from './EventBracket';
 
 interface TeamStanding {
   team_id: string;
@@ -7,6 +8,40 @@ interface TeamStanding {
   losses: number;
   roundsWon: number;
   roundsLost: number;
+}
+
+async function fetchBracketGroup(championshipId: string, group: number) {
+  try {
+    const res = await fetch(
+      `https://www.faceit.com/api/championships/v1/championship/${championshipId}/group/${group}/bracket`,
+      {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'Mozilla/5.0',
+          Referer: 'https://www.faceit.com/',
+        },
+        cache: 'no-store',
+      },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.payload ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchBracket(championshipId: string): Promise<BracketData> {
+  const [upper, lower, grandFinal] = await Promise.all([
+    fetchBracketGroup(championshipId, 1),
+    fetchBracketGroup(championshipId, 2),
+    fetchBracketGroup(championshipId, 3),
+  ]);
+  return {
+    upper: upper ?? undefined,
+    lower: lower ?? undefined,
+    grandFinal: grandFinal ?? undefined,
+  };
 }
 
 async function fetchAllChampionshipMatches(championshipId: string, headers: Record<string, string>) {
@@ -38,14 +73,25 @@ export default async function Page({ params }: { params: Promise<{ championshipI
     Accept: 'application/json',
   };
 
-  // Fetch all matches (paginated) and subscriptions in parallel
-  const [allMatches, subsRes] = await Promise.all([
+  // Fetch matches, subscriptions, and bracket in parallel
+  const [allMatches, subsRes, bracket] = await Promise.all([
     fetchAllChampionshipMatches(championshipId, headers),
     fetch(
       `https://open.faceit.com/data/v4/championships/${championshipId}/subscriptions?limit=100`,
       { headers, cache: 'no-store' }
     ).catch(() => null),
+    fetchBracket(championshipId),
   ]);
+
+  // Score map for the bracket component — keyed by match_id (bracket's originId)
+  const scoreMap: MatchScoreMap = {};
+  for (const m of allMatches) {
+    scoreMap[m.match_id] = {
+      status: m.status,
+      faction1Score: m.results?.score?.faction1,
+      faction2Score: m.results?.score?.faction2,
+    };
+  }
 
   if (allMatches.length === 0) {
     return (
@@ -227,9 +273,14 @@ export default async function Page({ params }: { params: Promise<{ championshipI
 
   const hasStandings = standings.length > 0;
 
+  // Pull the championship name from the first match's competition_name (the
+  // public /championships/{id} base-detail endpoint 404s for new ESEA-style
+  // championship IDs, so we can't rely on it).
+  const championshipName = allMatches[0]?.competition_name || 'Championship Dashboard';
+
   return (
     <div className="max-w-7xl mx-auto px-4">
-      <h1 className="text-2xl font-bold mb-6">Championship Dashboard</h1>
+      <h1 className="text-2xl font-bold mb-6">{championshipName}</h1>
 
       {/* Two-column layout: Standings + Ongoing/Upcoming */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -289,6 +340,9 @@ export default async function Page({ params }: { params: Promise<{ championshipI
           )}
         </div>
       </div>
+
+      {/* Bracket (only rendered when the championship has bracket data) */}
+      <EventBracket bracket={bracket} scoreMap={scoreMap} />
 
       <script
         dangerouslySetInnerHTML={{

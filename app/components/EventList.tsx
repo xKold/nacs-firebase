@@ -158,19 +158,39 @@ function EventCard({ event }: { event: UnifiedEvent }) {
             {dateStr}
           </span>
         )}
-        <svg
-          className="w-4 h-4 text-text-muted group-hover:text-accent group-hover:translate-x-0.5 transition-all duration-200"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
+        {event.external ? (
+          <svg
+            className="w-4 h-4 text-text-muted group-hover:text-accent transition-colors duration-200"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+            aria-label="Opens in new tab"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14 5h5v5M19 5l-9 9M5 5h6v2H7v10h10v-4h2v6H5V5z" />
+          </svg>
+        ) : (
+          <svg
+            className="w-4 h-4 text-text-muted group-hover:text-accent group-hover:translate-x-0.5 transition-all duration-200"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        )}
       </div>
     </div>
   );
 
+  if (event.external) {
+    return (
+      <a href={event.href} target="_blank" rel="noopener noreferrer">
+        {inner}
+      </a>
+    );
+  }
   return <Link href={event.href}>{inner}</Link>;
 }
 

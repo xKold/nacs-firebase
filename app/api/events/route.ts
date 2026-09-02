@@ -153,6 +153,7 @@ async function fetchPandaScore(): Promise<UnifiedEventDTO[]> {
 const NA_LEAGUE_IDS = [
   4641, // Fragadelphia
   5307, // Fragadelphia Tap Cup
+  5556, // FRAG Midwest
   4482, // Dust2.us (D2 Eagle Masters)
   4850, // CCT North America
   4764, // Ace North American Masters
@@ -233,9 +234,10 @@ function mapEseaEvents(): UnifiedEventDTO[] {
     source: 'faceit' as const,
     beginAt: e.beginAt,
     endAt: e.endAt,
-    href: `/matches/event/${e.id}`,
+    href: e.externalUrl ?? `/matches/event/${e.id}`,
     isNA: true,
     region: e.region,
+    external: Boolean(e.externalUrl),
   }));
 }
 

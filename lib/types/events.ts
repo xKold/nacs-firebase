@@ -15,6 +15,8 @@ export interface UnifiedEventDTO {
   isNA: boolean;
   region?: string;
   tournamentCount?: number;
+  /** When true, `href` is an absolute URL to an external site (e.g., FACEIT.com) — render as <a target="_blank"> */
+  external?: boolean;
 }
 
 /** Client-enriched event with computed status */
