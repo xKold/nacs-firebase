@@ -80,6 +80,7 @@ export default function RankingsPage() {
                   day: 'numeric',
                   year: 'numeric',
                 })}
+                <span className="text-text-muted/70"> · Valve publishes VRS monthly</span>
               </span>
             )}
           </p>

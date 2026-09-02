@@ -18,6 +18,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
+        {/* Default title + description; individual server-component pages can override via the Next.js metadata API */}
+        <title>NACS | North American CS2 Esports</title>
+        <meta
+          name="description"
+          content="Live tournament tracking, brackets, standings, and rankings for North American Counter-Strike 2. ESEA, Fragadelphia, CCT, BLAST, and more."
+        />
         <meta name="google-site-verification" content="0Vz1yT93wVWmdJ2lHZKbNpbAOEs4DhIIjySdd9aKA7c" />
       </head>
       <body>
