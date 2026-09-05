@@ -2,7 +2,7 @@
 
 A CS2 esports statistics and event tracking platform built for the North American semi-professional scene.
 
-**Live:** [nacs2x.web.app](https://nacs2x.web.app)
+**Live:** [nacs2x.vercel.app](https://nacs2x.vercel.app)
 
 ## Features
 
